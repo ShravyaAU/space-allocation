@@ -135,6 +135,7 @@ export default function App() {
 
   const [useZones, setUseZones] = useState(true);
   const [selected, setSelected] = useState(() => new Set());
+  const [roomSearch, setRoomSearch] = useState("");
 
   // programs: default 5
   const [programs, setPrograms] = useState([
@@ -338,12 +339,12 @@ export default function App() {
   const totalSelectedCapacity = useMemo(() => selectedSpaces.reduce((s, x) => s + x.capacity, 0), [selectedSpaces]);
 
   return (
-    <div style={{ fontFamily: "system-ui", padding: 16, maxWidth: 1200, margin: "0 auto" }}>
-      <h1>Space Allocation Tool</h1>
+    <div className="app-container">
+      <h1 className="app-title">Space Allocation Tool</h1>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div className="grid-2">
         {/* left column: data + program inputs */}
-        <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
+        <div className="card">
           <h2 style={{ marginTop: 0 }}>Data & Settings</h2>
           <p style={{ margin: 0 }}>
             Rooms: <b>{baseRooms.length}</b> &nbsp;|&nbsp; Zones: <b>{zones.length}</b>
@@ -364,9 +365,10 @@ export default function App() {
           <input
             value={courseName}
             onChange={(e) => setCourseName(e.target.value)}
-            style={{ width: "100%", padding: 8 }}
+            className="course-input"
             placeholder="e.g., ENG101"
-            />
+          />
+
         </div>
 
         {/* Programs */}
@@ -374,32 +376,21 @@ export default function App() {
           <h3 style={{ margin: "8px 0" }}>Programs (5)</h3>
 
           {programs.map((p, i) => (
-            <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-              <input
-                value={p.name}
-                onChange={(e) =>
-                  setPrograms((prev) => {
-                    const next = [...prev];
-                    next[i] = { ...next[i], name: e.target.value };
-                    return next;
-                  })
-                }
-                style={{ flex: 1, padding: 8 }}
-              />
-              <input
-                type="number"
-                min="0"
-                value={p.count}
-                onChange={(e) =>
-                  setPrograms((prev) => {
-                    const next = [...prev];
-                    next[i] = { ...next[i], count: Number(e.target.value || 0) };
-                    return next;
-                  })
-                }
-                style={{ width: 120, padding: 8 }}
-              />
-            </div>
+            <div key={i} className="program-row">
+  <input
+    className="program-name"
+    value={p.name}
+    onChange={(e) => setPrograms((prev) => { const next = [...prev]; next[i] = { ...next[i], name: e.target.value }; return next; })}
+  />
+  <input
+    className="program-count"
+    type="number"
+    min="0"
+    value={p.count}
+    onChange={(e) => setPrograms((prev) => { const next = [...prev]; next[i] = { ...next[i], count: Number(e.target.value || 0) }; return next; })}
+  />
+</div>
+
           ))}
       </div>
 
@@ -430,7 +421,7 @@ export default function App() {
       </button>
     </div>
 
-    <div style={{ marginTop: 12, padding: 12, background: "#111", borderRadius: 10, color: "white" }}>
+    <div className="info-box">
       <div>
         Selected spaces: <b>{selectedSpaces.length}</b>
       </div>
@@ -445,36 +436,110 @@ export default function App() {
         {/* right column: select spaces */}
         <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
           <h2 style={{ marginTop: 0 }}>Select Spaces</h2>
-          <div style={{ maxHeight: 520, overflow: "auto", border: "1px solid #eee", borderRadius: 10 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #eee" }}>Use</th>
-                  <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #eee" }}>Type</th>
-                  <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #eee" }}>Building</th>
-                  <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #eee" }}>Space</th>
-                  <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #eee" }}>Capacity</th>
+
+<div style={{ marginBottom: 10, display: "flex", gap: 8, alignItems: "center" }}>
+  <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+    <input type="checkbox" checked={useZones} onChange={(e) => setUseZones(e.target.checked)} />
+    Show Combined Zones
+  </label>
+  <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+    <button className="button secondary" onClick={() => {
+      // select all visible
+      const keys = (useZones ? zones.concat(baseRooms) : baseRooms)
+        .filter(s => {
+          if (!roomSearch) return true;
+          return String(s.label).toLowerCase().includes(roomSearch.toLowerCase());
+        }).map(s => s.key);
+      setSelected(new Set(keys));
+    }}>Select All</button>
+
+    <button className="button secondary" onClick={() => setSelected(new Set())}>Clear All</button>
+  </div>
+</div>
+
+<div className="spaces-split">
+  {/* Zones column */}
+  <div>
+    <div className="section-header">Zones</div>
+    <div style={{ marginBottom: 8, color: "#6b7280", fontSize: 13 }}>Zones act as one combined space (if used).</div>
+
+    <div style={{ maxHeight: 360, overflow: "auto", border: "1px solid #eee", borderRadius: 8, padding: 10 }}>
+      <table>
+        <thead>
+          <tr><th style={{padding:8}}>Use</th><th style={{padding:8}}>Zone</th><th style={{padding:8}}>Cap</th></tr>
+        </thead>
+        <tbody>
+          {zones.map(z => (
+            <tr key={z.key}>
+              <td style={{padding:8}}>
+                <input
+                  type="checkbox"
+                  checked={selected.has(z.key)}
+                  onChange={() => toggleSelect(z.key)}
+                />
+              </td>
+              <td style={{padding:8}}>{z.label}</td>
+              <td style={{padding:8}}>{z.capacity}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {/* Rooms column */}
+  <div>
+    <div className="section-header">Rooms</div>
+    <input
+      placeholder="Search rooms (number or building)..."
+      className="small-search"
+      value={roomSearch}
+      onChange={(e) => setRoomSearch(e.target.value)}
+    />
+
+    <div style={{ maxHeight: 360, overflow: "auto", border: "1px solid #eee", borderRadius: 8, padding: 10 }}>
+      <table>
+        <thead>
+          <tr>
+            <th style={{padding:8}}>Use</th>
+            <th style={{padding:8}}>Room</th>
+            <th style={{padding:8}}>Building</th>
+            <th style={{padding:8}}>Cap</th>
+          </tr>
+        </thead>
+        <tbody>
+          {baseRooms
+            .filter(r => {
+              if (!roomSearch) return true;
+              return (
+                String(r.room).toLowerCase().includes(roomSearch.toLowerCase()) ||
+                String(r.building).toLowerCase().includes(roomSearch.toLowerCase())
+              );
+            })
+            .map(r => {
+              const disabled = useZones && zonedRoomIds.has(r.id);
+              return (
+                <tr key={r.key} style={{ opacity: disabled ? 0.45 : 1 }}>
+                  <td style={{ padding: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={selected.has(r.key)}
+                      disabled={disabled}
+                      onChange={() => toggleSelect(r.key)}
+                    />
+                  </td>
+                  <td style={{ padding: 8 }}>{r.room}</td>
+                  <td style={{ padding: 8 }}>{r.building}</td>
+                  <td style={{ padding: 8 }}>{r.capacity}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {selectableSpaces.map((s) => {
-                  const isRoomInZone = useZones && s.kind === "room" && zonedRoomIds.has(s.id);
-                  const disabled = isRoomInZone;
-                  return (
-                    <tr key={s.key} style={{ opacity: disabled ? 0.45 : 1 }}>
-                      <td style={{ padding: 10, borderBottom: "1px solid #f3f3f3" }}>
-                        <input type="checkbox" checked={selected.has(s.key)} disabled={disabled} onChange={() => toggleSelect(s.key)} />
-                      </td>
-                      <td style={{ padding: 10, borderBottom: "1px solid #f3f3f3" }}>{s.kind}</td>
-                      <td style={{ padding: 10, borderBottom: "1px solid #f3f3f3" }}>{s.building}</td>
-                      <td style={{ padding: 10, borderBottom: "1px solid #f3f3f3" }}>{s.label}</td>
-                      <td style={{ padding: 10, borderBottom: "1px solid #f3f3f3" }}>{s.capacity}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+              );
+            })}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
         </div>
       </div>
 
