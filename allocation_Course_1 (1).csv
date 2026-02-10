@@ -1,9 +1,0 @@
-course,row_type,total_students,Landscape,Architecture,Design,Graphic,Interior
-Course 1,course_summary,300,80,70,60,50,40
-course,row_type,space,type,capacity,total_allocated,Landscape,Architecture,Design,Graphic,Interior
-Course 1,space_allocation,Design South (DS) 2,room,50,50,13,11,10,8,8
-Course 1,space_allocation,Design South (DS) 221,room,24,24,6,5,6,4,3
-Course 1,space_allocation,Design South (DS) 320,room,55,55,16,13,10,9,7
-Course 1,space_allocation,Design South (DS) 321,room,55,55,14,13,12,9,7
-Course 1,space_allocation,Design South (DS) 340,room,55,55,16,13,10,9,7
-Course 1,space_allocation,Design South (DS) 341,room,55,55,13,13,11,11,7

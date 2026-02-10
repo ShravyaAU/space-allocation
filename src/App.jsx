@@ -420,6 +420,13 @@ export default function App() {
     () => selectedSpaces.reduce((s, x) => s + x.capacity, 0),
     [selectedSpaces]
   );
+  const totalRequestedStudents = useMemo(() => {
+  return programs.reduce((sum, p) => sum + Math.max(0, Math.floor(Number(p.count) || 0)), 0);
+}, [programs]);
+
+const capacityDiff = totalSelectedCapacity - totalRequestedStudents;
+const capacityOk = capacityDiff >= 0;
+
 
   // Select all visible (filtered buildings + search)
   function selectAllVisible() {
@@ -535,6 +542,30 @@ export default function App() {
             Export CSV
           </button>
         </div>
+        
+        <div
+  style={{
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 10,
+    border: "1px solid",
+    borderColor: capacityOk ? "#bbf7d0" : "#fecaca",
+    background: capacityOk ? "#f0fdf4" : "#fef2f2",
+    color: capacityOk ? "#166534" : "#991b1b",
+    fontWeight: 600,
+  }}
+>
+  {capacityOk ? (
+    <>
+      ✅ Capacity OK — You have <b>{capacityDiff}</b> extra seats.
+    </>
+  ) : (
+    <>
+      ⚠️ Not enough capacity — You need <b>{Math.abs(capacityDiff)}</b> more seats.
+    </>
+  )}
+</div>
+
 
         <div className="info-box">
           <div>
