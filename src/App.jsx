@@ -10,6 +10,69 @@ function toNum(x) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function csvEscape(value) {
+  const s = String(value ?? "");
+  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function buildAllocationCsv({ courseName, programs, allocationResult }) {
+  const programNames = allocationResult.programs;
+
+  const lines = [];
+
+  // One summary row at top
+  lines.push(
+    ["course", "row_type", "total_students", ...programNames].map(csvEscape).join(",")
+  );
+
+  lines.push(
+    [
+      courseName,
+      "course_summary",
+      allocationResult.summary.totalStudents,
+      ...programs.map((p) => Math.max(0, Math.floor(Number(p.count) || 0))),
+    ].map(csvEscape).join(",")
+  );
+
+  // Header for room rows
+  lines.push(
+    ["course", "row_type", "space", "type", "capacity", "total_allocated", ...programNames]
+      .map(csvEscape)
+      .join(",")
+  );
+
+  for (const r of allocationResult.rooms) {
+    lines.push(
+      [
+        courseName,
+        "space_allocation",
+        r.label,
+        r.kind,
+        r.capacity,
+        r.totalAllocated,
+        ...r.allocated,
+      ].map(csvEscape).join(",")
+    );
+  }
+
+  return lines.join("\n");
+}
+
+
+function downloadTextFile(filename, content, mime = "text/csv;charset=utf-8") {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+
 /* Proportional allocation for one room:
    Inputs:
      - capacity: number of seats in the room
@@ -81,9 +144,13 @@ export default function App() {
     { name: "Program 4", count: 50 },
     { name: "Program 5", count: 40 },
   ]);
+  const [courseName, setCourseName] = useState("Course 1");
 
   // allocation result object
   const [allocationResult, setAllocationResult] = useState(null);
+
+  
+
 
   useEffect(() => {
     Papa.parse("/data/space_division.csv", {
@@ -283,47 +350,97 @@ export default function App() {
           </p>
 
           <label style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 12 }}>
-            <input type="checkbox" checked={useZones} onChange={(e) => setUseZones(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={useZones}
+              onChange={(e) => setUseZones(e.target.checked)}
+            />
             Use Combined Zones
           </label>
 
-          <div style={{ marginTop: 12 }}>
-            <h3 style={{ margin: "8px 0" }}>Programs (5)</h3>
-            {programs.map((p, i) => (
-              <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                <input
-                  value={p.name}
-                  onChange={(e) => setPrograms((prev) => { const next = [...prev]; next[i] = { ...next[i], name: e.target.value }; return next; })}
-                  style={{ flex: 1, padding: 8 }}
-                />
-                <input
-                  type="number"
-                  min="0"
-                  value={p.count}
-                  onChange={(e) => setPrograms((prev) => { const next = [...prev]; next[i] = { ...next[i], count: Number(e.target.value || 0) }; return next; })}
-                  style={{ width: 120, padding: 8 }}
-                />
-              </div>
-            ))}
-          </div>
-
-          <div style={{ marginTop: 12 }}>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={runAllocation} style={{ padding: "10px 14px", borderRadius: 8 }}>
-                Run Allocation
-              </button>
-
-              <button onClick={() => { setAllocationResult(null); }} style={{ padding: "10px 14px", borderRadius: 8 }}>
-                Reset Result
-              </button>
-            </div>
-
-            <div style={{ marginTop: 12, padding: 12, background: "#111", borderRadius: 10, color: "white" }}>
-              <div>Selected spaces: <b>{selectedSpaces.length}</b></div>
-              <div>Total capacity selected: <b>{totalSelectedCapacity}</b></div>
-            </div>
-          </div>
+        {/* Course name */}
+        <div style={{ marginTop: 12 }}>
+          <label style={{ display: "block", marginBottom: 6 }}>Course Name</label>
+          <input
+            value={courseName}
+            onChange={(e) => setCourseName(e.target.value)}
+            style={{ width: "100%", padding: 8 }}
+            placeholder="e.g., ENG101"
+            />
         </div>
+
+        {/* Programs */}
+        <div style={{ marginTop: 12 }}>
+          <h3 style={{ margin: "8px 0" }}>Programs (5)</h3>
+
+          {programs.map((p, i) => (
+            <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              <input
+                value={p.name}
+                onChange={(e) =>
+                  setPrograms((prev) => {
+                    const next = [...prev];
+                    next[i] = { ...next[i], name: e.target.value };
+                    return next;
+                  })
+                }
+                style={{ flex: 1, padding: 8 }}
+              />
+              <input
+                type="number"
+                min="0"
+                value={p.count}
+                onChange={(e) =>
+                  setPrograms((prev) => {
+                    const next = [...prev];
+                    next[i] = { ...next[i], count: Number(e.target.value || 0) };
+                    return next;
+                  })
+                }
+                style={{ width: 120, padding: 8 }}
+              />
+            </div>
+          ))}
+      </div>
+
+  {/* Buttons */}
+  <div style={{ marginTop: 12 }}>
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <button onClick={runAllocation} style={{ padding: "10px 14px", borderRadius: 8 }}>
+        Run Allocation
+      </button>
+
+      <button
+        onClick={() => setAllocationResult(null)}
+        style={{ padding: "10px 14px", borderRadius: 8 }}
+      >
+        Reset Result
+      </button>
+
+      <button
+        disabled={!allocationResult}
+        onClick={() => {
+          const csv = buildAllocationCsv({ courseName, programs, allocationResult });
+          const safeCourse = (courseName || "course").replace(/[^a-z0-9-_]+/gi, "_");
+          downloadTextFile(`allocation_${safeCourse}.csv`, csv);
+        }}
+        style={{ padding: "10px 14px", borderRadius: 8 }}
+      >
+        Export CSV
+      </button>
+    </div>
+
+    <div style={{ marginTop: 12, padding: 12, background: "#111", borderRadius: 10, color: "white" }}>
+      <div>
+        Selected spaces: <b>{selectedSpaces.length}</b>
+      </div>
+      <div>
+        Total capacity selected: <b>{totalSelectedCapacity}</b>
+      </div>
+    </div>
+  </div>
+</div>
+
 
         {/* right column: select spaces */}
         <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
