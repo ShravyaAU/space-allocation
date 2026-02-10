@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Papa from "papaparse";
+import "./App.css";
 
 /* ----------------- helpers ----------------- */
 function norm(s) {
@@ -18,13 +19,9 @@ function csvEscape(value) {
 
 function buildAllocationCsv({ courseName, programs, allocationResult }) {
   const programNames = allocationResult.programs;
-
   const lines = [];
 
-  // One summary row at top
-  lines.push(
-    ["course", "row_type", "total_students", ...programNames].map(csvEscape).join(",")
-  );
+  lines.push(["course", "row_type", "total_students", ...programNames].map(csvEscape).join(","));
 
   lines.push(
     [
@@ -32,10 +29,11 @@ function buildAllocationCsv({ courseName, programs, allocationResult }) {
       "course_summary",
       allocationResult.summary.totalStudents,
       ...programs.map((p) => Math.max(0, Math.floor(Number(p.count) || 0))),
-    ].map(csvEscape).join(",")
+    ]
+      .map(csvEscape)
+      .join(",")
   );
 
-  // Header for room rows
   lines.push(
     ["course", "row_type", "space", "type", "capacity", "total_allocated", ...programNames]
       .map(csvEscape)
@@ -52,13 +50,14 @@ function buildAllocationCsv({ courseName, programs, allocationResult }) {
         r.capacity,
         r.totalAllocated,
         ...r.allocated,
-      ].map(csvEscape).join(",")
+      ]
+        .map(csvEscape)
+        .join(",")
     );
   }
 
   return lines.join("\n");
 }
-
 
 function downloadTextFile(filename, content, mime = "text/csv;charset=utf-8") {
   const blob = new Blob([content], { type: mime });
@@ -72,38 +71,21 @@ function downloadTextFile(filename, content, mime = "text/csv;charset=utf-8") {
   URL.revokeObjectURL(url);
 }
 
-
-/* Proportional allocation for one room:
-   Inputs:
-     - capacity: number of seats in the room
-     - progRemaining: array of remaining students per program (numbers)
-   Returns:
-     - alloc: array of allocated counts per program (same length)
-   Algorithm:
-     - compute ideal = progRem[i] * capacity / totalRem
-     - take floor(ideal)
-     - distribute leftover seats one-by-one to programs with largest fractional remainder,
-       but never exceed progRemaining[i].
-*/
+/* Proportional allocation for one room */
 function allocateForRoom(capacity, progRemaining) {
   const n = progRemaining.length;
   const totalRem = progRemaining.reduce((s, x) => s + x, 0);
   if (totalRem === 0 || capacity === 0) return new Array(n).fill(0);
 
-  // ideal fractional
   const ideal = progRemaining.map((r) => (r / totalRem) * capacity);
   const base = ideal.map((v) => Math.floor(v));
-  let allocated = base.slice();
+  const allocated = base.slice();
   let used = allocated.reduce((s, x) => s + x, 0);
   let leftover = capacity - used;
 
-  // compute fractional remainders with index
   const fracs = ideal.map((v, i) => ({ i, frac: v - Math.floor(v) }));
-
-  // sort by fractional desc, tie-break by larger remaining students
   fracs.sort((a, b) => b.frac - a.frac);
 
-  // distribute leftovers
   for (let k = 0; k < fracs.length && leftover > 0; ++k) {
     const i = fracs[k].i;
     const canTake = Math.min(leftover, progRemaining[i] - allocated[i]);
@@ -113,7 +95,6 @@ function allocateForRoom(capacity, progRemaining) {
     }
   }
 
-  // If still leftover (edge cases where some programs already exhausted), distribute to any with remaining
   if (leftover > 0) {
     for (let i = 0; i < n && leftover > 0; ++i) {
       const canTake = Math.min(leftover, progRemaining[i] - allocated[i]);
@@ -135,9 +116,12 @@ export default function App() {
 
   const [useZones, setUseZones] = useState(true);
   const [selected, setSelected] = useState(() => new Set());
-  const [roomSearch, setRoomSearch] = useState("");
 
-  // programs: default 5
+  // Room selection controls (Option C)
+  const [buildingFilter, setBuildingFilter] = useState("ALL"); // ALL | Design North (DN) | Design South (DS)
+  const [searchText, setSearchText] = useState("");
+
+  // Programs & course
   const [programs, setPrograms] = useState([
     { name: "Program 1", count: 80 },
     { name: "Program 2", count: 70 },
@@ -147,12 +131,9 @@ export default function App() {
   ]);
   const [courseName, setCourseName] = useState("Course 1");
 
-  // allocation result object
   const [allocationResult, setAllocationResult] = useState(null);
 
-  
-
-
+  // Load CSVs
   useEffect(() => {
     Papa.parse("/data/space_division.csv", {
       download: true,
@@ -208,11 +189,12 @@ export default function App() {
     });
   }, []);
 
-  /* Build selectable spaces (zones + rooms) as before */
+  // Rooms
   const baseRooms = useMemo(() => {
     return spaceRows.map((r) => ({
       key: `room:${r.building}:${r.room}`,
       id: r.room,
+      room: r.room,
       label: `${r.building} ${r.room}`,
       building: r.building,
       level: r.level,
@@ -222,6 +204,7 @@ export default function App() {
     }));
   }, [spaceRows]);
 
+  // Zones
   const zones = useMemo(() => {
     return combinedRows.map((z) => ({
       key: `zone:${z.combined_id}`,
@@ -239,12 +222,14 @@ export default function App() {
     }));
   }, [combinedRows]);
 
+  // room ids inside any zone
   const zonedRoomIds = useMemo(() => {
     const s = new Set();
     for (const z of zones) for (const m of z.members) s.add(m);
     return s;
   }, [zones]);
 
+  // selectableSpaces used for allocation only
   const selectableSpaces = useMemo(() => {
     const list = useZones ? [...zones, ...baseRooms] : [...baseRooms];
     return list.sort((a, b) => {
@@ -262,7 +247,7 @@ export default function App() {
     setSelected(new Set(selectableSpaces.map((x) => x.key)));
   }, [selectableSpaces.length]);
 
-  // Adjust selected when toggle changes
+  // Keep selection valid when toggling zones
   useEffect(() => {
     setSelected((prev) => {
       const allowed = new Set(selectableSpaces.map((x) => x.key));
@@ -281,24 +266,123 @@ export default function App() {
     });
   }
 
-  /* ---- Allocation logic over all selected spaces ---- */
+  // Group rooms by building -> level
+  const roomsByBuilding = useMemo(() => {
+    const out = {};
+    for (const r of baseRooms) {
+      const b = r.building || "Unknown";
+      const l = r.level || "Unknown Level";
+      out[b] = out[b] || {};
+      out[b][l] = out[b][l] || [];
+      out[b][l].push(r);
+    }
+    return out;
+  }, [baseRooms]);
+
+  // Zones by building
+  const zonesByBuilding = useMemo(() => {
+    const out = {};
+    for (const z of zones) {
+      const b = z.building || "Unknown";
+      out[b] = out[b] || [];
+      out[b].push(z);
+    }
+    return out;
+  }, [zones]);
+
+  // Filtered buildings list (based on dropdown)
+  const filteredBuildingNames = useMemo(() => {
+    const all = Object.keys(roomsByBuilding);
+    if (buildingFilter === "ALL") return all.sort();
+    return all.filter((b) => b === buildingFilter).sort();
+  }, [roomsByBuilding, buildingFilter]);
+
+  // Search matcher
+  const q = useMemo(() => norm(searchText).toLowerCase(), [searchText]);
+
+  function matchesSearch(text) {
+    if (!q) return true;
+    return String(text || "").toLowerCase().includes(q);
+  }
+
+  // Keys for bulk selection
+  function keysForBuilding(building) {
+    const keys = [];
+    const levs = roomsByBuilding[building] || {};
+    for (const level of Object.keys(levs)) {
+      for (const r of levs[level]) {
+        // Search filter also affects bulk selection (only visible items)
+        if (matchesSearch(`${r.building} ${r.level} ${r.room}`)) keys.push(r.key);
+      }
+    }
+    if (useZones) {
+      for (const z of zonesByBuilding[building] || []) {
+        if (matchesSearch(`${z.label} ${z.building}`)) keys.push(z.key);
+      }
+    }
+    return keys;
+  }
+
+  function keysForLevel(building, level) {
+    const keys = [];
+    const levs = roomsByBuilding[building] || {};
+    for (const r of levs[level] || []) {
+      if (matchesSearch(`${r.building} ${r.level} ${r.room}`)) keys.push(r.key);
+    }
+    return keys;
+  }
+
+  function setSelectedKeys(keys, add = true) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const k of keys) add ? next.add(k) : next.delete(k);
+      return next;
+    });
+  }
+
+  // Stats (visible-only, based on search/filter)
+  function buildingStatsVisible(building) {
+    let cap = 0;
+    let selectedCap = 0;
+    let zonesCount = 0;
+
+    const levs = roomsByBuilding[building] || {};
+    for (const level of Object.keys(levs)) {
+      for (const r of levs[level] || []) {
+        if (!matchesSearch(`${r.building} ${r.level} ${r.room}`)) continue;
+        cap += r.capacity;
+        if (selected.has(r.key)) selectedCap += r.capacity;
+      }
+    }
+
+    if (useZones) {
+      const zb = zonesByBuilding[building] || [];
+      for (const z of zb) {
+        if (!matchesSearch(`${z.label} ${z.building}`)) continue;
+        cap += z.capacity;
+        zonesCount += 1;
+        if (selected.has(z.key)) selectedCap += z.capacity;
+      }
+    }
+
+    return { cap, selectedCap, zonesCount };
+  }
+
+  /* ---- Allocation ---- */
   function runAllocation() {
-    // Prepare selected spaces in sensible order (zones first already)
     const map = new Map(selectableSpaces.map((s) => [s.key, s]));
     const selectedList = Array.from(selected).map((k) => map.get(k)).filter(Boolean);
 
-    // Starting remaining students per program
     const progRemaining = programs.map((p) => Math.max(0, Math.floor(Number(p.count) || 0)));
     const totalStudents = progRemaining.reduce((s, x) => s + x, 0);
 
     const roomAllocations = [];
 
     for (const s of selectedList) {
-      if (progRemaining.reduce((a, b) => a + b, 0) === 0) break; // nothing left
+      if (progRemaining.reduce((a, b) => a + b, 0) === 0) break;
 
       const alloc = allocateForRoom(s.capacity, progRemaining);
 
-      // store and subtract
       roomAllocations.push({
         key: s.key,
         id: s.id,
@@ -314,43 +398,64 @@ export default function App() {
       }
     }
 
-    // final remaining per program & summary
     const remaining = progRemaining.slice();
     const allocatedTotals = programs.map((_, i) =>
       roomAllocations.reduce((s, r) => s + (r.allocated[i] || 0), 0)
     );
-    const summary = {
-      totalStudents,
-      allocatedTotals,
-      remaining,
-    };
 
-    setAllocationResult({ rooms: roomAllocations, summary, programs: programs.map((p) => p.name) });
+    setAllocationResult({
+      rooms: roomAllocations,
+      summary: { totalStudents, allocatedTotals, remaining },
+      programs: programs.map((p) => p.name),
+    });
   }
 
-  /* UI helpers */
+  // UI helpers
   const selectedSpaces = useMemo(() => {
     const map = new Map(selectableSpaces.map((x) => [x.key, x]));
-    return Array.from(selected)
-      .map((k) => map.get(k))
-      .filter(Boolean);
+    return Array.from(selected).map((k) => map.get(k)).filter(Boolean);
   }, [selected, selectableSpaces]);
 
-  const totalSelectedCapacity = useMemo(() => selectedSpaces.reduce((s, x) => s + x.capacity, 0), [selectedSpaces]);
+  const totalSelectedCapacity = useMemo(
+    () => selectedSpaces.reduce((s, x) => s + x.capacity, 0),
+    [selectedSpaces]
+  );
+
+  // Select all visible (filtered buildings + search)
+  function selectAllVisible() {
+    const keys = [];
+    for (const b of filteredBuildingNames) keys.push(...keysForBuilding(b));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const k of keys) next.add(k);
+      return next;
+    });
+  }
+
+  function clearAllVisible() {
+    const keys = [];
+    for (const b of filteredBuildingNames) keys.push(...keysForBuilding(b));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const k of keys) next.delete(k);
+      return next;
+    });
+  }
 
   return (
     <div className="app-container">
       <h1 className="app-title">Space Allocation Tool</h1>
 
-      <div className="grid-2">
-        {/* left column: data + program inputs */}
-        <div className="card">
-          <h2 style={{ marginTop: 0 }}>Data & Settings</h2>
-          <p style={{ margin: 0 }}>
-            Rooms: <b>{baseRooms.length}</b> &nbsp;|&nbsp; Zones: <b>{zones.length}</b>
-          </p>
+      {/* ---------- Allocation Parameters (TOP) ---------- */}
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>Allocation Parameters</h2>
 
-          <label style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 12 }}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ color: "#6b7280" }}>
+            Rooms loaded: <b>{baseRooms.length}</b> &nbsp;|&nbsp; Zones loaded: <b>{zones.length}</b>
+          </div>
+
+          <label style={{ display: "flex", gap: 10, alignItems: "center", marginLeft: "auto" }}>
             <input
               type="checkbox"
               checked={useZones}
@@ -358,246 +463,385 @@ export default function App() {
             />
             Use Combined Zones
           </label>
+        </div>
 
-        {/* Course name */}
-        <div style={{ marginTop: 12 }}>
-          <label style={{ display: "block", marginBottom: 6 }}>Course Name</label>
+        <div style={{ marginTop: 14 }}>
+          <label style={{ display: "block", marginBottom: 6, fontWeight: 700 }}>Course Name</label>
           <input
             value={courseName}
             onChange={(e) => setCourseName(e.target.value)}
-            className="course-input"
-            placeholder="e.g., ENG101"
+            style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #e5e7eb" }}
+            placeholder="e.g., Course 1"
           />
-
         </div>
 
-        {/* Programs */}
-        <div style={{ marginTop: 12 }}>
-          <h3 style={{ margin: "8px 0" }}>Programs (5)</h3>
+        <div style={{ marginTop: 14 }}>
+          <h3 style={{ margin: "10px 0" }}>Programs (5)</h3>
 
           {programs.map((p, i) => (
-            <div key={i} className="program-row">
-  <input
-    className="program-name"
-    value={p.name}
-    onChange={(e) => setPrograms((prev) => { const next = [...prev]; next[i] = { ...next[i], name: e.target.value }; return next; })}
-  />
-  <input
-    className="program-count"
-    type="number"
-    min="0"
-    value={p.count}
-    onChange={(e) => setPrograms((prev) => { const next = [...prev]; next[i] = { ...next[i], count: Number(e.target.value || 0) }; return next; })}
-  />
-</div>
+            <div
+              key={i}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 120px",
+                gap: 10,
+                marginBottom: 10,
+              }}
+            >
+              <input
+                value={p.name}
+                onChange={(e) =>
+                  setPrograms((prev) => {
+                    const next = [...prev];
+                    next[i] = { ...next[i], name: e.target.value };
+                    return next;
+                  })
+                }
+                style={{ padding: 10, borderRadius: 8, border: "1px solid #e5e7eb" }}
+              />
 
+              <input
+                type="number"
+                min="0"
+                value={p.count}
+                onChange={(e) =>
+                  setPrograms((prev) => {
+                    const next = [...prev];
+                    next[i] = { ...next[i], count: Number(e.target.value || 0) };
+                    return next;
+                  })
+                }
+                style={{ padding: 10, borderRadius: 8, border: "1px solid #e5e7eb" }}
+              />
+            </div>
           ))}
-      </div>
+        </div>
 
-  {/* Buttons */}
-  <div style={{ marginTop: 12 }}>
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-      <button onClick={runAllocation} style={{ padding: "10px 14px", borderRadius: 8 }}>
-        Run Allocation
-      </button>
+        <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button onClick={runAllocation}>Run Allocation</button>
 
-      <button
-        onClick={() => setAllocationResult(null)}
-        style={{ padding: "10px 14px", borderRadius: 8 }}
-      >
-        Reset Result
-      </button>
+          <button className="secondary" onClick={() => setAllocationResult(null)}>
+            Reset Result
+          </button>
 
-      <button
-        disabled={!allocationResult}
-        onClick={() => {
-          const csv = buildAllocationCsv({ courseName, programs, allocationResult });
-          const safeCourse = (courseName || "course").replace(/[^a-z0-9-_]+/gi, "_");
-          downloadTextFile(`allocation_${safeCourse}.csv`, csv);
-        }}
-        style={{ padding: "10px 14px", borderRadius: 8 }}
-      >
-        Export CSV
-      </button>
-    </div>
+          <button
+            disabled={!allocationResult}
+            onClick={() => {
+              const csv = buildAllocationCsv({ courseName, programs, allocationResult });
+              const safeCourse = (courseName || "course").replace(/[^a-z0-9-_]+/gi, "_");
+              downloadTextFile(`allocation_${safeCourse}.csv`, csv);
+            }}
+          >
+            Export CSV
+          </button>
+        </div>
 
-    <div className="info-box">
-      <div>
-        Selected spaces: <b>{selectedSpaces.length}</b>
-      </div>
-      <div>
-        Total capacity selected: <b>{totalSelectedCapacity}</b>
-      </div>
-    </div>
-  </div>
-</div>
-
-
-        {/* right column: select spaces */}
-        <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
-          <h2 style={{ marginTop: 0 }}>Select Spaces</h2>
-
-<div style={{ marginBottom: 10, display: "flex", gap: 8, alignItems: "center" }}>
-  <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-    <input type="checkbox" checked={useZones} onChange={(e) => setUseZones(e.target.checked)} />
-    Show Combined Zones
-  </label>
-  <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-    <button className="button secondary" onClick={() => {
-      // select all visible
-      const keys = (useZones ? zones.concat(baseRooms) : baseRooms)
-        .filter(s => {
-          if (!roomSearch) return true;
-          return String(s.label).toLowerCase().includes(roomSearch.toLowerCase());
-        }).map(s => s.key);
-      setSelected(new Set(keys));
-    }}>Select All</button>
-
-    <button className="button secondary" onClick={() => setSelected(new Set())}>Clear All</button>
-  </div>
-</div>
-
-<div className="spaces-split">
-  {/* Zones column */}
-  <div>
-    <div className="section-header">Zones</div>
-    <div style={{ marginBottom: 8, color: "#6b7280", fontSize: 13 }}>Zones act as one combined space (if used).</div>
-
-    <div style={{ maxHeight: 360, overflow: "auto", border: "1px solid #eee", borderRadius: 8, padding: 10 }}>
-      <table>
-        <thead>
-          <tr><th style={{padding:8}}>Use</th><th style={{padding:8}}>Zone</th><th style={{padding:8}}>Cap</th></tr>
-        </thead>
-        <tbody>
-          {zones.map(z => (
-            <tr key={z.key}>
-              <td style={{padding:8}}>
-                <input
-                  type="checkbox"
-                  checked={selected.has(z.key)}
-                  onChange={() => toggleSelect(z.key)}
-                />
-              </td>
-              <td style={{padding:8}}>{z.label}</td>
-              <td style={{padding:8}}>{z.capacity}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  {/* Rooms column */}
-  <div>
-    <div className="section-header">Rooms</div>
-    <input
-      placeholder="Search rooms (number or building)..."
-      className="small-search"
-      value={roomSearch}
-      onChange={(e) => setRoomSearch(e.target.value)}
-    />
-
-    <div style={{ maxHeight: 360, overflow: "auto", border: "1px solid #eee", borderRadius: 8, padding: 10 }}>
-      <table>
-        <thead>
-          <tr>
-            <th style={{padding:8}}>Use</th>
-            <th style={{padding:8}}>Room</th>
-            <th style={{padding:8}}>Building</th>
-            <th style={{padding:8}}>Cap</th>
-          </tr>
-        </thead>
-        <tbody>
-          {baseRooms
-            .filter(r => {
-              if (!roomSearch) return true;
-              return (
-                String(r.room).toLowerCase().includes(roomSearch.toLowerCase()) ||
-                String(r.building).toLowerCase().includes(roomSearch.toLowerCase())
-              );
-            })
-            .map(r => {
-              const disabled = useZones && zonedRoomIds.has(r.id);
-              return (
-                <tr key={r.key} style={{ opacity: disabled ? 0.45 : 1 }}>
-                  <td style={{ padding: 8 }}>
-                    <input
-                      type="checkbox"
-                      checked={selected.has(r.key)}
-                      disabled={disabled}
-                      onChange={() => toggleSelect(r.key)}
-                    />
-                  </td>
-                  <td style={{ padding: 8 }}>{r.room}</td>
-                  <td style={{ padding: 8 }}>{r.building}</td>
-                  <td style={{ padding: 8 }}>{r.capacity}</td>
-                </tr>
-              );
-            })}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
+        <div className="info-box">
+          <div>
+            Selected spaces: <b>{selectedSpaces.length}</b>
+          </div>
+          <div>
+            Total capacity selected: <b>{totalSelectedCapacity}</b>
+          </div>
         </div>
       </div>
 
-      {/* Allocation results */}
-      <div style={{ marginTop: 16, border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
+      {/* ---------- Room Selection (BELOW) ---------- */}
+      <div className="card" style={{ marginTop: 16 }}>
+        <h2 style={{ marginTop: 0 }}>Room Selection</h2>
+
+        {/* Controls row */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "240px 1fr auto",
+            gap: 10,
+            alignItems: "center",
+            marginBottom: 12,
+          }}
+        >
+          <select
+            value={buildingFilter}
+            onChange={(e) => setBuildingFilter(e.target.value)}
+            style={{ padding: 10, borderRadius: 8, border: "1px solid #e5e7eb" }}
+          >
+            <option value="ALL">All Buildings</option>
+            <option value="Design North (DN)">Design North (DN)</option>
+            <option value="Design South (DS)">Design South (DS)</option>
+          </select>
+
+          <input
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            placeholder="Search rooms / levels / zones (e.g., 265, Level - 2, DN-265-283)..."
+            style={{ padding: 10, borderRadius: 8, border: "1px solid #e5e7eb" }}
+          />
+
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button className="secondary" onClick={selectAllVisible}>Select Visible</button>
+            <button className="secondary" onClick={clearAllVisible}>Clear Visible</button>
+          </div>
+        </div>
+
+        <div style={{ color: "#6b7280", marginBottom: 10 }}>
+          Tip: Buildings and levels are dropdowns. Expand what you need and select rooms/zones.
+        </div>
+
+        {/* Buildings */}
+        <div style={{ display: "grid", gap: 12 }}>
+          {filteredBuildingNames.length === 0 ? (
+            <div style={{ color: "#6b7280" }}>No rooms found for the selected filter.</div>
+          ) : (
+            filteredBuildingNames.map((building) => {
+              const levels = roomsByBuilding[building] || {};
+              const { cap, selectedCap, zonesCount } = buildingStatsVisible(building);
+              const buildingKeys = keysForBuilding(building);
+              const allBuildingSelected = buildingKeys.length > 0 && buildingKeys.every((k) => selected.has(k));
+
+              // Hide building entirely if search yields nothing inside
+              if (q && cap === 0 && (!useZones || zonesCount === 0)) {
+                return null;
+              }
+
+              return (
+                <details
+                  key={building}
+                  style={{
+                    border: "1px solid #e6efe0",
+                    borderRadius: 10,
+                    padding: 12,
+                    background: "#fff",
+                  }}
+                >
+                  <summary style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
+                    <div style={{ fontWeight: 800 }}>{building}</div>
+
+                    <span
+                      style={{
+                        background: "#eef7ee",
+                        color: "#166534",
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        fontSize: 13,
+                      }}
+                    >
+                      {selectedCap} / {cap} capacity included
+                    </span>
+
+                    <div style={{ marginLeft: "auto", display: "flex", gap: 12, alignItems: "center" }}>
+                      <div style={{ color: "#6b7280", fontSize: 13 }}>
+                        {useZones ? `${zonesCount} zone${zonesCount !== 1 ? "s" : ""}` : "Zones off"}
+                      </div>
+
+                      <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <input
+                          type="checkbox"
+                          checked={allBuildingSelected}
+                          onChange={(e) => {
+                            if (e.target.checked) setSelectedKeys(buildingKeys, true);
+                            else setSelectedKeys(buildingKeys, false);
+                          }}
+                        />
+                        <span style={{ fontSize: 13 }}>Use</span>
+                      </label>
+                    </div>
+                  </summary>
+
+                  <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+                    {/* Zones */}
+                    {useZones && (zonesByBuilding[building] || []).some((z) => matchesSearch(`${z.label} ${z.building}`)) && (
+                      <div style={{ padding: 10, border: "1px dashed #e5e7eb", borderRadius: 10, background: "#fbfffb" }}>
+                        <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 8 }}>Combined Zones</div>
+
+                        <div style={{ display: "grid", gap: 8 }}>
+                          {(zonesByBuilding[building] || [])
+                            .filter((z) => matchesSearch(`${z.label} ${z.building}`))
+                            .map((z) => (
+                              <div
+                                key={z.key}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                  padding: 10,
+                                  borderRadius: 10,
+                                  background: "#fff",
+                                  border: "1px solid #eef2f7",
+                                }}
+                              >
+                                <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={selected.has(z.key)}
+                                    onChange={() => toggleSelect(z.key)}
+                                  />
+                                  <div style={{ fontWeight: 700 }}>{z.label}</div>
+                                </div>
+                                <div style={{ fontSize: 13, color: "#2563eb" }}>{z.capacity} seats</div>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Levels (dropdowns) */}
+                    {Object.keys(levels).map((level) => {
+                      const levelKeys = keysForLevel(building, level);
+                      const visibleRooms = (levels[level] || []).filter((r) =>
+                        matchesSearch(`${r.building} ${r.level} ${r.room}`)
+                      );
+
+                      if (visibleRooms.length === 0) return null;
+
+                      const levelSelected = levelKeys.length > 0 && levelKeys.every((k) => selected.has(k));
+                      const levelSeats = visibleRooms.reduce((s, r) => s + r.capacity, 0);
+
+                      return (
+                        <details
+                          key={level}
+                          style={{
+                            border: "1px solid #eef2ff",
+                            borderRadius: 10,
+                            padding: 10,
+                            background: "#fff",
+                          }}
+                        >
+                          <summary style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
+                            <div style={{ fontWeight: 700 }}>{level}</div>
+
+                            <div style={{ marginLeft: "auto", display: "flex", gap: 12, alignItems: "center" }}>
+                              <div style={{ color: "#6b7280", fontSize: 13 }}>{levelSeats} seats</div>
+
+                              <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                                <input
+                                  type="checkbox"
+                                  checked={levelSelected}
+                                  onChange={(e) => {
+                                    if (e.target.checked) setSelectedKeys(levelKeys, true);
+                                    else setSelectedKeys(levelKeys, false);
+                                  }}
+                                />
+                                <span style={{ fontSize: 13 }}>Use level</span>
+                              </label>
+                            </div>
+                          </summary>
+
+                          <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                            {visibleRooms.map((r) => {
+                              const disabled = useZones && zonedRoomIds.has(r.id);
+
+                              return (
+                                <div
+                                  key={r.key}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    padding: "10px 12px",
+                                    borderRadius: 10,
+                                    background: disabled ? "#f8fafc" : "#ffffff",
+                                    border: "1px solid #eef2f7",
+                                    opacity: disabled ? 0.55 : 1,
+                                  }}
+                                >
+                                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={selected.has(r.key)}
+                                      disabled={disabled}
+                                      onChange={() => toggleSelect(r.key)}
+                                    />
+                                    <div>
+                                      <div style={{ fontWeight: 700 }}>{`Room ${r.room}`}</div>
+                                      <div style={{ fontSize: 13, color: "#6b7280" }}>{r.building}</div>
+                                    </div>
+                                  </div>
+
+                                  <div style={{ fontSize: 13, color: "#2563eb" }}>{r.capacity} seats</div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </details>
+                      );
+                    })}
+                  </div>
+                </details>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* ---------- Allocation results ---------- */}
+      <div className="card" style={{ marginTop: 16 }}>
         <h2 style={{ marginTop: 0 }}>Allocation Results</h2>
 
         {!allocationResult ? (
-          <p>No allocation run yet. Click <b>Run Allocation</b>.</p>
+          <p>
+            No allocation run yet. Click <b>Run Allocation</b>.
+          </p>
         ) : (
           <>
             <h3>Summary</h3>
             <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-              <div>Total students: <b>{allocationResult.summary.totalStudents}</b></div>
-              <div>Allocated total: <b>{allocationResult.summary.allocatedTotals.reduce((a,b)=>a+b,0)}</b></div>
-              <div>Unallocated (remaining): <b>{allocationResult.summary.remaining.reduce((a,b)=>a+b,0)}</b></div>
+              <div>
+                Total students: <b>{allocationResult.summary.totalStudents}</b>
+              </div>
+              <div>
+                Allocated total:{" "}
+                <b>{allocationResult.summary.allocatedTotals.reduce((a, b) => a + b, 0)}</b>
+              </div>
+              <div>
+                Unallocated (remaining):{" "}
+                <b>{allocationResult.summary.remaining.reduce((a, b) => a + b, 0)}</b>
+              </div>
             </div>
 
             <h3 style={{ marginTop: 12 }}>Per-program totals</h3>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <table>
               <thead>
                 <tr>
-                  <th style={{ padding: 8, borderBottom: "1px solid #eee" }}>Program</th>
-                  <th style={{ padding: 8, borderBottom: "1px solid #eee" }}>Requested</th>
-                  <th style={{ padding: 8, borderBottom: "1px solid #eee" }}>Allocated</th>
-                  <th style={{ padding: 8, borderBottom: "1px solid #eee" }}>Remaining</th>
+                  <th>Program</th>
+                  <th>Requested</th>
+                  <th>Allocated</th>
+                  <th>Remaining</th>
                 </tr>
               </thead>
               <tbody>
                 {allocationResult.programs.map((name, i) => (
                   <tr key={name}>
-                    <td style={{ padding: 8, borderBottom: "1px solid #f3f3f3" }}>{name}</td>
-                    <td style={{ padding: 8, borderBottom: "1px solid #f3f3f3" }}>{programs[i].count}</td>
-                    <td style={{ padding: 8, borderBottom: "1px solid #f3f3f3" }}>{allocationResult.summary.allocatedTotals[i]}</td>
-                    <td style={{ padding: 8, borderBottom: "1px solid #f3f3f3" }}>{allocationResult.summary.remaining[i]}</td>
+                    <td>{name}</td>
+                    <td>{programs[i].count}</td>
+                    <td>{allocationResult.summary.allocatedTotals[i]}</td>
+                    <td>{allocationResult.summary.remaining[i]}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
 
             <h3 style={{ marginTop: 12 }}>Room allocations</h3>
-            <div style={{ maxHeight: 380, overflow: "auto", border: "1px solid #eee", borderRadius: 8 }}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <div style={{ maxHeight: 420, overflow: "auto", border: "1px solid #eee", borderRadius: 10 }}>
+              <table>
                 <thead>
                   <tr>
-                    <th style={{ padding: 8, borderBottom: "1px solid #eee" }}>Space</th>
-                    <th style={{ padding: 8, borderBottom: "1px solid #eee" }}>Cap</th>
-                    <th style={{ padding: 8, borderBottom: "1px solid #eee" }}>Total Alloc</th>
-                    {allocationResult.programs.map((p) => <th key={p} style={{ padding: 8, borderBottom: "1px solid #eee" }}>{p}</th>)}
+                    <th>Space</th>
+                    <th>Cap</th>
+                    <th>Total Alloc</th>
+                    {allocationResult.programs.map((p) => (
+                      <th key={p}>{p}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
                   {allocationResult.rooms.map((r) => (
                     <tr key={r.key}>
-                      <td style={{ padding: 8, borderBottom: "1px solid #f3f3f3" }}>{r.label}</td>
-                      <td style={{ padding: 8, borderBottom: "1px solid #f3f3f3" }}>{r.capacity}</td>
-                      <td style={{ padding: 8, borderBottom: "1px solid #f3f3f3" }}>{r.totalAllocated}</td>
-                      {r.allocated.map((v, i) => <td key={i} style={{ padding: 8, borderBottom: "1px solid #f3f3f3" }}>{v}</td>)}
+                      <td>{r.label}</td>
+                      <td>{r.capacity}</td>
+                      <td>{r.totalAllocated}</td>
+                      {r.allocated.map((v, i) => (
+                        <td key={i}>{v}</td>
+                      ))}
                     </tr>
                   ))}
                 </tbody>

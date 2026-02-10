@@ -1,0 +1,11 @@
+course,row_type,total_students,Program 1,Program 2,Program 3,Program 4,Program 5
+Course 1,course_summary,270,60,60,60,50,40
+course,row_type,space,type,capacity,total_allocated,Program 1,Program 2,Program 3,Program 4,Program 5
+Course 1,space_allocation,Design North (DN) 66,room,25,25,5,5,5,4,6
+Course 1,space_allocation,Design North (DN) 71,room,66,66,17,14,14,12,9
+Course 1,space_allocation,Design North (DN) 265,room,30,30,6,9,6,5,4
+Course 1,space_allocation,Design North (DN) 267,room,30,30,6,6,7,7,4
+Course 1,space_allocation,Design North (DN) 269,room,30,30,8,6,7,5,4
+Course 1,space_allocation,Design North (DN) 271,room,30,30,6,8,7,5,4
+Course 1,space_allocation,Design North (DN) 277,room,30,30,6,6,7,6,5
+Course 1,space_allocation,Design North (DN) 281,room,30,29,6,6,7,6,4
