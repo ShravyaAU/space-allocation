@@ -1,16 +1,97 @@
-# React + Vite
+# Space Allocation Tool
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A web-based planning tool to allocate first-year students from multiple programs into shared classrooms while respecting room capacities and combined space constraints.
 
-Currently, two official plugins are available:
+🔗 **Live Demo:** https://space-allocation-khaki.vercel.app  
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
 
-## React Compiler
+---
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Features
 
-## Expanding the ESLint configuration
+- Allocate students from **multiple programs** into shared spaces
+- Support for **combined zones** (multiple rooms treated as one space)
+- **Building → Level → Room** hierarchical selection
+- Live **capacity validation** with warnings
+- Fair, proportional allocation across programs
+- Export allocation results as **CSV**
+- Clean, admin-friendly UI
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+---
+
+## How It Works
+
+### 1. Allocation Parameters
+- Enter the **course name**
+- Enter student counts for each program
+- Enable or disable **Combined Zones**
+
+A capacity banner will immediately tell you if selected spaces can accommodate all students.
+
+---
+
+### 2. Room Selection
+Rooms are organized by:
+Building
+└─ Level
+└─ Rooms / Combined Zones
+
+
+You can:
+- Filter by building
+- Search by room number, level, or zone ID
+- Select or clear rooms in bulk
+- Expand only the sections you need
+
+---
+
+### 3. Run Allocation
+Click **Run Allocation** to distribute students proportionally across selected spaces.
+
+The results include:
+- Per-program totals
+- Per-room breakdowns
+- Remaining capacity (if any)
+
+---
+
+### 4. Export CSV
+Click **Export CSV** to download a file containing:
+- Course summary
+- Room-by-room student allocations
+- Program-wise counts
+
+---
+
+## CSV Data Sources
+
+The app reads room data from CSV files located in:
+public/data/
+├─ space_division.csv
+└─ combined_spaces.csv
+
+## Tech Stack
+
+React + Vite
+JavaScript
+PapaParse (CSV parsing)
+Vercel (deployment)
+
+## Local Development
+npm install
+npm run dev
+
+## Deployment
+
+The app is deployed using Vercel.
+Any push to the main branch automatically triggers a new deployment.
+
+## License
+
+This project is for academic and planning use.
+
+### 3.3 Commit & push README
+```bash
+git add README.md
+git commit -m "Add project README"
+git push
