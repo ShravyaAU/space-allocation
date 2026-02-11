@@ -123,11 +123,11 @@ export default function App() {
 
   // Programs & course
   const [programs, setPrograms] = useState([
-    { name: "Program 1", count: 80 },
-    { name: "Program 2", count: 70 },
-    { name: "Program 3", count: 60 },
-    { name: "Program 4", count: 50 },
-    { name: "Program 5", count: 40 },
+    { name: "Architecture", count: 80 },
+    { name: "Interior", count: 70 },
+    { name: "Industrial", count: 60 },
+    { name: "Graphic", count: 50 },
+    { name: "Landscape", count: 40 },
   ]);
   const [courseName, setCourseName] = useState("Course 1");
 
