@@ -256,6 +256,10 @@ export default function App() {
       return next;
     });
   }, [useZones, selectableSpaces]);
+  useEffect(() => {
+  setAllocationResult(null); // clear old results when switching zone mode
+}, [useZones]);
+
 
   function toggleSelect(key) {
     setSelected((prev) => {
@@ -378,25 +382,28 @@ export default function App() {
 
     const roomAllocations = [];
 
-    for (const s of selectedList) {
-      if (progRemaining.reduce((a, b) => a + b, 0) === 0) break;
+  for (const s of selectedList) {
+  const remainingTotal = progRemaining.reduce((a, b) => a + b, 0);
+  if (remainingTotal === 0) break;
 
-      const alloc = allocateForRoom(s.capacity, progRemaining);
+  const effectiveCapacity = Math.min(s.capacity, remainingTotal);
 
-      roomAllocations.push({
-        key: s.key,
-        id: s.id,
-        label: s.label,
-        kind: s.kind,
-        capacity: s.capacity,
-        allocated: alloc.slice(),
-        totalAllocated: alloc.reduce((a, b) => a + b, 0),
-      });
+  const alloc = allocateForRoom(effectiveCapacity, progRemaining);
 
-      for (let i = 0; i < progRemaining.length; ++i) {
-        progRemaining[i] = Math.max(0, progRemaining[i] - alloc[i]);
-      }
-    }
+  roomAllocations.push({
+    key: s.key,
+    id: s.id,
+    label: s.label,
+    kind: s.kind,
+    capacity: s.capacity,
+    allocated: alloc.slice(),
+    totalAllocated: alloc.reduce((a, b) => a + b, 0),
+  });
+
+  for (let i = 0; i < progRemaining.length; ++i) {
+    progRemaining[i] = Math.max(0, progRemaining[i] - alloc[i]);
+  }
+}
 
     const remaining = progRemaining.slice();
     const allocatedTotals = programs.map((_, i) =>
