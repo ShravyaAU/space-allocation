@@ -229,6 +229,25 @@ export default function App() {
     return s;
   }, [zones]);
 
+  // which zones are selected
+const selectedZoneIds = useMemo(() => {
+  return new Set(
+    Array.from(selected)
+      .filter((key) => key.startsWith("zone:"))
+  );
+}, [selected]);
+
+// room ids inside selected zones only
+const roomsInsideSelectedZones = useMemo(() => {
+  const set = new Set();
+  for (const z of zones) {
+    if (selectedZoneIds.has(z.key)) {
+      for (const m of z.members) set.add(m);
+    }
+  }
+  return set;
+}, [zones, selectedZoneIds]);
+
   // selectableSpaces used for allocation only
   const selectableSpaces = useMemo(() => {
     const list = useZones ? [...zones, ...baseRooms] : [...baseRooms];
@@ -766,7 +785,7 @@ const capacityOk = capacityDiff >= 0;
 
                           <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
                             {visibleRooms.map((r) => {
-                              const disabled = useZones && zonedRoomIds.has(r.id);
+                              const disabled = useZones && roomsInsideSelectedZones.has(r.id);
 
                               return (
                                 <div
